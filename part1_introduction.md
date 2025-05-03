@@ -36,10 +36,10 @@ def load_data(file_path):
     Returns:
         DataFrame containing the data
     """
-    # YOUR CODE HERE
     # Load the CSV file using pandas
+    df = pd.read_csv(file_path)
     
-    return pd.DataFrame()  # Replace with actual implementation
+    return df
 ```
 
 ## 3. Data Preparation
@@ -59,14 +59,24 @@ def prepare_data_part1(df, test_size=0.2, random_state=42):
     Returns:
         X_train, X_test, y_train, y_test
     """
-    # YOUR CODE HERE
-    # 1. Select relevant features (age, systolic_bp, diastolic_bp, glucose_level, bmi)
-    # 2. Select target variable (disease_outcome)
-    # 3. Split data into training and testing sets
-    # 4. Handle missing values using SimpleImputer
+    # 1. Select relevant features
+    feature_cols = ['age', 'systolic_bp', 'diastolic_bp', 'glucose_level', 'bmi']
+    X = df[feature_cols]
     
-    # Placeholder return - replace with your implementation
-    return None, None, None, None
+    # 2. Select target variable
+    y = df['disease_outcome']
+    
+    # 3. Split data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state
+    )
+    
+    # 4. Handle missing values using SimpleImputer (mean strategy)
+    imputer = SimpleImputer(strategy='mean')
+    X_train = imputer.fit_transform(X_train)
+    X_test = imputer.transform(X_test)
+    
+    return X_train, X_test, y_train, y_test
 ```
 
 ## 4. Model Training
@@ -85,10 +95,13 @@ def train_logistic_regression(X_train, y_train):
     Returns:
         Trained logistic regression model
     """
-    # YOUR CODE HERE
-    # Initialize and train a LogisticRegression model
+     # Initialize the model
+    model = LogisticRegression(max_iter=1000, random_state=42)
     
-    return None  # Replace with actual implementation
+    # Fit the model to the training data
+    model.fit(X_train, y_train)
+    
+    return model
 ```
 
 ## 5. Model Evaluation
@@ -108,27 +121,62 @@ def calculate_evaluation_metrics(model, X_test, y_test):
     Returns:
         Dictionary containing accuracy, precision, recall, f1, auc, and confusion_matrix
     """
-    # YOUR CODE HERE
     # 1. Generate predictions
-    # 2. Calculate metrics: accuracy, precision, recall, f1, auc
-    # 3. Create confusion matrix
-    # 4. Return metrics in a dictionary
+    y_pred = model.predict(X_test)
+    y_prob = model.predict_proba(X_test)[:, 1]
     
-    # Placeholder return - replace with your implementation
-    return {}
+    # 2. Calculate metrics
+    acc = accuracy_score(y_test, y_pred)
+    prec = precision_score(y_test, y_pred)
+    rec = recall_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+    auc = roc_auc_score(y_test, y_prob)
+    
+    # 3. Create confusion matrix
+    cm = confusion_matrix(y_test, y_pred)
+    
+    # 4. Return metrics in a dictionary
+    return {
+        'accuracy': acc,
+        'precision': prec,
+        'recall': rec,
+        'f1_score': f1,
+        'roc_auc': auc,
+        'confusion_matrix': cm
+    }
 ```
 
 ## 6. Save Results
 
 Save the calculated metrics to a text file.
-
 ```python
+
+import os
+
 # Create results directory and save metrics
-# YOUR CODE HERE
-# 1. Create 'results' directory if it doesn't exist
-# 2. Format metrics as strings
-# 3. Write metrics to 'results/results_part1.txt'
-```
+def save_metrics_to_file(metrics, filename='results/results_part1.txt'):
+    """
+    Save evaluation metrics to a text file.
+    
+    Args:
+        metrics: Dictionary of evaluation metrics
+        filename: Path to the output file
+    """
+    # 1. Create 'results' directory if it doesn't exist
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    
+    # 2. Format metrics as strings
+    lines = []
+    for key, value in metrics.items():
+        if key == 'confusion_matrix':
+            lines.append(f"{key}:\n{value}")
+        else:
+            lines.append(f"{key}: {value:.4f}")
+    
+    # 3. Write metrics to file
+    with open(filename, 'w') as f:
+        f.write('\n'.join(lines))
+
 
 ## 7. Main Execution
 
@@ -156,7 +204,7 @@ if __name__ == "__main__":
             print(f"{metric}: {value:.4f}")
     
     # 6. Save results
-    # (Your code for saving results)
+    save_metrics_to_file(metrics, filename='results/results_part1.txt')
     
     # 7. Interpret results
     interpretation = interpret_results(metrics)
@@ -184,15 +232,30 @@ def interpret_results(metrics):
         - 'imbalance_impact_score': A score from 0-1 indicating how much
           the class imbalance affected results (0=no impact, 1=severe impact)
     """
-    # YOUR CODE HERE
-    # 1. Determine which metric performed best and worst
-    # 2. Calculate an imbalance impact score based on the difference
-    #    between accuracy and more imbalance-sensitive metrics like F1 or recall
-    # 3. Return the results as a dictionary
+    # Exclude confusion_matrix from scalar comparisons
+    scalar_metrics = {k: v for k, v in metrics.items() if k != 'confusion_matrix'}
     
-    # Placeholder return - replace with your implementation
+    # 1. Determine best and worst performing metric
+    best_metric = max(scalar_metrics, key=scalar_metrics.get)
+    worst_metric = min(scalar_metrics, key=scalar_metrics.get)
+
+    # 2. Calculate imbalance impact score
+    # High difference between accuracy and recall/F1 means possible imbalance impact
+    acc = scalar_metrics.get('accuracy', 0)
+    recall = scalar_metrics.get('recall', 0)
+    f1 = scalar_metrics.get('f1_score', 0)
+    
+    # Use average of absolute gaps
+    imbalance_impact_score = np.mean([
+        abs(acc - recall),
+        abs(acc - f1)
+    ])
+    
+    # Clip score to [0, 1]
+    imbalance_impact_score = min(max(imbalance_impact_score, 0.0), 1.0)
+    
     return {
-        'best_metric': 'unknown',
-        'worst_metric': 'unknown',
-        'imbalance_impact_score': 0.0
+        'best_metric': best_metric,
+        'worst_metric': worst_metric,
+        'imbalance_impact_score': imbalance_impact_score
     }
